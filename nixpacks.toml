@@ -1,0 +1,5 @@
+[phases.setup]
+aptPkgs = ["tesseract-ocr", "tesseract-ocr-eng"]
+
+[start]
+cmd = "python discord_trader.py"

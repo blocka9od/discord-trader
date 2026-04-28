@@ -1,0 +1,10 @@
+alpaca-py
+yfinance
+pandas
+schedule
+pytz
+feedparser
+discord.py-self
+pillow
+httpx
+pytesseract
