@@ -6,6 +6,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY discord_trader.py .
+COPY *.py .
 
 CMD ["python", "discord_trader.py"]
