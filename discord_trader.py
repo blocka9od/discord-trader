@@ -52,7 +52,7 @@ DAY_TRADES_FILE    = r"C:\Users\ajblo\trading_bot\day_trades.json"
 
 tc             = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 data_client    = StockHistoricalDataClient(ALPACA_KEY, ALPACA_SECRET)
-claude_client  = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_KEY"])
+claude_client  = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_KEY", ""))
 
 def send_email(subject, body):
     try:
