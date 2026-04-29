@@ -8,3 +8,4 @@ discord.py-self
 pillow
 httpx
 pytesseract
+anthropic

@@ -14,6 +14,7 @@ from alpaca.trading.requests import GetOptionContractsRequest, LimitOrderRequest
 from alpaca.trading.enums import ContractType, OrderSide, TimeInForce
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestTradeRequest
+import anthropic
 
 import os, platform
 if platform.system() == "Windows":
@@ -49,8 +50,9 @@ LATE_TAKE_PROFIT   = 1.80    # late entry take profit (180%)
 DAY_TRADE_LIMIT    = 2       # max day trades per week
 DAY_TRADES_FILE    = r"C:\Users\ajblo\trading_bot\day_trades.json"
 
-tc          = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
-data_client = StockHistoricalDataClient(ALPACA_KEY, ALPACA_SECRET)
+tc             = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
+data_client    = StockHistoricalDataClient(ALPACA_KEY, ALPACA_SECRET)
+claude_client  = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_KEY"])
 
 def send_email(subject, body):
     try:
@@ -130,6 +132,53 @@ def extract_pnl_from_screenshot(image_url):
     except Exception as e:
         print(f"  OCR failed: {e}")
     return None, None
+
+def get_claude_opinion(trade, pnl, stock_price, contract_price, image_url=None):
+    """Ask Claude if this trade is worth taking."""
+    ticker    = trade["ticker"]
+    strike    = trade["strike"]
+    direction = trade["direction"]
+    expiry    = trade.get("expiry")
+    total     = round(contract_price * 100, 2)
+
+    prompt = (
+        f"You are a options trading assistant helping a trader decide whether to copy a trade from a trader named JR.\n\n"
+        f"JR's trade details:\n"
+        f"- Ticker: {ticker}\n"
+        f"- Stock price: ${stock_price:.2f}\n"
+        f"- Option: ${strike} {direction} exp {expiry}\n"
+        f"- Contract price: ${contract_price:.2f}/share (${total} per contract)\n"
+        f"- JR's current P&L on this position: {pnl}%\n\n"
+        f"Entry rules:\n"
+        f"- Normal entry: JR P&L between -6% and 38%, contract $10–$150\n"
+        f"- Late entry: JR P&L between 50% and 133%, contract $350–$750, 1 qty only\n"
+        f"- Stock must move $5–$15/day (no penny stocks)\n\n"
+        f"Give a SHORT opinion (3-4 sentences max): Should the trader get in YES or NO, and the main reason why. "
+        f"Consider JR's P&L timing, the stock's momentum, and whether the contract price makes sense."
+    )
+
+    messages = [{"role": "user", "content": prompt}]
+
+    if image_url:
+        try:
+            img_data = httpx.get(image_url, timeout=10).content
+            img_b64  = __import__('base64').b64encode(img_data).decode()
+            messages = [{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                {"type": "text", "text": prompt}
+            ]}]
+        except:
+            pass
+
+    try:
+        resp = claude_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            messages=messages
+        )
+        return resp.content[0].text.strip()
+    except Exception as e:
+        return f"Claude opinion unavailable: {e}"
 
 async def execute_late_entry(trade, source_text, pnl, report=""):
     """Late entry: JR up 50-133%, 1 qty, $350-$750/contract, TP at 180%."""
@@ -278,6 +327,10 @@ async def execute_trade(trade, source_text, report=""):
     else:
         qty = QTY_TIER3
 
+    # Get Claude's opinion before placing order
+    opinion = get_claude_opinion(trade, pnl if 'pnl' in dir() else None, stock_price, chosen_price)
+    print(f"  Claude: {opinion}")
+
     try:
         order = tc.submit_order(LimitOrderRequest(
             symbol=chosen_contract.symbol,
@@ -295,6 +348,7 @@ async def execute_trade(trade, source_text, report=""):
             f"Limit: ${round(chosen_price*1.05,2)} | Est. cost: ${round(chosen_price*1.05*qty*100,2)}\n"
             f"Order ID: {order.id}\n"
             f"Time: {datetime.now().strftime('%I:%M %p')}\n\n"
+            f"── CLAUDE'S OPINION ──\n{opinion}\n\n"
             f"── WHAT BOT SAW ──\n{report}"
         )
         increment_day_trades()
