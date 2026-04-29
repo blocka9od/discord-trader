@@ -116,23 +116,22 @@ def parse_trade(text):
     return None
 
 def extract_pnl_from_screenshot(image_url):
-    """Download JR's screenshot and OCR it to find the P&L percentage."""
+    """Download JR's screenshot and OCR it to find the P&L percentage. Returns (pnl, ocr_text)."""
     try:
-        resp = httpx.get(image_url, timeout=10)
-        img  = Image.open(io.BytesIO(resp.content))
-        text = pytesseract.image_to_string(img)
-        print(f"  OCR text: {text[:200]}")
-        # Look for patterns like +15.3%, -6%, 38.00%, +15%
-        matches = re.findall(r'([+-]?\d{1,3}(?:\.\d{1,2})?)\s*%', text)
-        # Filter to plausible P&L range (-100% to 2000%)
-        pnls = [float(x) for x in matches if -100 <= float(x) <= 2000]
+        resp     = httpx.get(image_url, timeout=10)
+        img      = Image.open(io.BytesIO(resp.content))
+        ocr_text = pytesseract.image_to_string(img)
+        print(f"  OCR text: {ocr_text[:200]}")
+        matches  = re.findall(r'([+-]?\d{1,3}(?:\.\d{1,2})?)\s*%', ocr_text)
+        pnls     = [float(x) for x in matches if -100 <= float(x) <= 2000]
         if pnls:
-            return pnls[0]
+            return pnls[0], ocr_text
+        return None, ocr_text
     except Exception as e:
         print(f"  OCR failed: {e}")
-    return None
+    return None, None
 
-async def execute_late_entry(trade, source_text, pnl):
+async def execute_late_entry(trade, source_text, pnl, report=""):
     """Late entry: JR up 50-133%, 1 qty, $350-$750/contract, TP at 180%."""
     ticker    = trade["ticker"]
     strike    = trade["strike"]
@@ -186,14 +185,14 @@ async def execute_late_entry(trade, source_text, pnl):
 
         body = (
             f"LATE ENTRY — JR UP {pnl}%\n"
-            f"Signal: {source_text}\n\n"
             f"Contract: {contract.symbol}\n"
             f"Strike: ${contract.strike_price} | Exp: {contract.expiration_date}\n"
             f"Direction: {direction} | Qty: {LATE_QTY}\n"
             f"Limit: ${round(price*1.05,2)} | Est. cost: ${round(price*1.05*100,2)}\n"
             f"*** TAKE PROFIT AT 180% = ${tp_price}/share ***\n"
             f"Order ID: {order.id}\n"
-            f"Time: {datetime.now().strftime('%I:%M %p CT')}"
+            f"Time: {datetime.now().strftime('%I:%M %p')}\n\n"
+            f"── WHAT BOT SAW ──\n{report}"
         )
         print(body)
         send_email(f"LATE ENTRY: {ticker} {direction} ${contract.strike_price} — TP@180%", body)
@@ -203,7 +202,7 @@ async def execute_late_entry(trade, source_text, pnl):
         print(err)
         send_email("Late Entry Error", err)
 
-async def execute_trade(trade, source_text):
+async def execute_trade(trade, source_text, report=""):
     ticker    = trade["ticker"]
     strike    = trade["strike"]
     direction = trade["direction"]
@@ -290,13 +289,13 @@ async def execute_trade(trade, source_text):
 
         body = (
             f"TRADE COPIED FROM JR\n"
-            f"Signal: {source_text}\n\n"
             f"Contract: {chosen_contract.symbol}\n"
             f"Strike: ${chosen_contract.strike_price} | Exp: {chosen_contract.expiration_date}\n"
             f"Direction: {direction} | Qty: {qty}\n"
             f"Limit: ${round(chosen_price*1.05,2)} | Est. cost: ${round(chosen_price*1.05*qty*100,2)}\n"
             f"Order ID: {order.id}\n"
-            f"Time: {datetime.now().strftime('%I:%M %p CT')}"
+            f"Time: {datetime.now().strftime('%I:%M %p')}\n\n"
+            f"── WHAT BOT SAW ──\n{report}"
         )
         increment_day_trades()
         print(body)
@@ -343,11 +342,14 @@ async def on_message(message):
         return
 
     # Check P&L from screenshot attachments
-    pnl = None
+    pnl        = None
+    ocr_text   = None
+    screenshot = None
     for attachment in message.attachments:
         if any(attachment.filename.lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp"]):
             print(f"  Screenshot detected: {attachment.filename}")
-            pnl = extract_pnl_from_screenshot(attachment.url)
+            screenshot = attachment.filename
+            pnl, ocr_text = extract_pnl_from_screenshot(attachment.url)
             if pnl is not None:
                 print(f"  JR P&L: {pnl}%")
             break
@@ -360,34 +362,47 @@ async def on_message(message):
             if trade:
                 break
 
+    # Build screenshot report header for all emails
+    def screenshot_report():
+        lines = [f"Time: {datetime.now().strftime('%I:%M %p')}"]
+        if screenshot:
+            lines.append(f"Screenshot: {screenshot}")
+        if ocr_text:
+            lines.append(f"\nWhat bot read from image:\n{ocr_text[:500]}")
+        if pnl is not None:
+            lines.append(f"\nP&L detected: {pnl}%")
+        if trade:
+            lines.append(f"Trade parsed: {trade['ticker']} ${trade['strike']} {trade['direction']} exp={trade.get('expiry')}")
+        lines.append(f"\nJR's message: {text or '(no text)'}")
+        return "\n".join(lines)
+
     if not trade:
-        send_email("JR Posted — Check Manually", f"JR posted but couldn't parse:\n\n{text}")
+        send_email("JR Posted — Check Manually", f"Bot could not parse a trade from this post.\n\n{screenshot_report()}")
         return
 
     # Route based on P&L
     if pnl is not None:
         if PNL_MIN <= pnl <= PNL_MAX:
             print(f"  P&L {pnl}% — normal entry")
-            await execute_trade(trade, text)
+            await execute_trade(trade, text, screenshot_report())
 
         elif LATE_PNL_MIN <= pnl <= LATE_PNL_MAX:
             used = get_day_trades_used()
             print(f"  P&L {pnl}% — late entry check (day trades used this week: {used})")
             if used == 1:
                 print(f"  1 day trade used — qualifying for late entry")
-                await execute_late_entry(trade, text, pnl)
+                await execute_late_entry(trade, text, pnl, screenshot_report())
             else:
                 msg = f"SKIPPED late entry: need exactly 1 day trade used this week, currently {used}"
                 print(msg)
-                send_email("Late Entry Skipped — Day Trade Count", f"{text}\n\n{msg}")
+                send_email("Late Entry Skipped — Day Trade Count", f"{msg}\n\n{screenshot_report()}")
 
         else:
-            msg = f"SKIPPED: JR's P&L is {pnl}% — not in normal range [{PNL_MIN}%–{PNL_MAX}%] or late range [{LATE_PNL_MIN}%–{LATE_PNL_MAX}%]"
+            msg = f"SKIPPED: JR P&L {pnl}% — not in normal range [{PNL_MIN}%–{PNL_MAX}%] or late range [{LATE_PNL_MIN}%–{LATE_PNL_MAX}%]"
             print(msg)
-            send_email("Trade Skipped — P&L Out of Range", f"{text}\n\n{msg}")
+            send_email("Trade Skipped — P&L Out of Range", f"{msg}\n\n{screenshot_report()}")
     else:
-        # No screenshot / couldn't read P&L — proceed with normal entry
         print(f"  No P&L detected — proceeding with normal entry")
-        await execute_trade(trade, text)
+        await execute_trade(trade, text, screenshot_report())
 
 client.run(USER_TOKEN)
