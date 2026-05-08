@@ -341,11 +341,11 @@ def execute(t, trade_type):
                 print(f"  {symbol}: contract ${total_cost:.0f} over $550 max — skipping")
                 return
             elif total_cost <= 150:
-                qty = 2
-            elif total_cost <= 250:
-                qty = 2
-            elif total_cost <= 399:
                 qty = 3
+            elif total_cost <= 250:
+                qty = 3
+            elif total_cost <= 399:
+                qty = 2
             else:
                 qty = 1
         else:
