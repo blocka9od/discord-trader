@@ -38,8 +38,8 @@ QTY_TIER1          = 6       # qty when contract costs $25–$50
 QTY_TIER2          = 3       # qty when contract costs $51–$85
 QTY_TIER3          = 3       # qty when contract costs $86–$150
 QTY_TIER4          = 2       # qty when contract costs $151–$299
-TAKE_PROFIT_MIN    = 3.50    # 350% = 3.5x entry
-TAKE_PROFIT_MAX    = 14.00   # 1300% = 14x entry
+TAKE_PROFIT_MIN    = 3.00    # 300% = 3x entry
+TAKE_PROFIT_MAX    = 8.00    # 800% = 8x entry
 PNL_MIN            = -6.0    # min P&L % for normal entry
 PNL_MAX            = 38.0    # max P&L % for normal entry
 LATE_PNL_MIN       = 50.0    # min P&L % for late entry

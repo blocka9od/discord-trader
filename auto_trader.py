@@ -37,26 +37,26 @@ DAY_TRADE_TICKERS  = ["SPY", "IWM", "QQQ"]   # day trades only
 SWING_TICKERS      = ["IWM", "AMD", "TSLA", "META", "NVDA", "INTC", "TSM", "CAR", "F"]  # swings
 BASE_TICKERS       = list(dict.fromkeys(DAY_TRADE_TICKERS + SWING_TICKERS))  # all unique
 
-MAX_DAY_TRADES     = 2   # SPY / IWM / QQQ — same-day exit
-MAX_SWING_TRADES   = 3   # 1 IWM swing + 2 individual stocks — hold overnight
-MAX_IWM_SWINGS     = 1   # only 1 IWM swing per week
-MAX_STOCK_SWINGS   = 2   # max 2 individual-stock swings per week
+MAX_DAY_TRADES     = 2   # IWM/SPY/QQQ — same-day exit, Mon-Thu only
+MAX_SWING_TRADES   = 5   # 2 JR + 2 Friday straddle + 1 stock swing
+MAX_IWM_SWINGS     = 1   # only 1 IWM swing per week (not counting straddle)
+MAX_STOCK_SWINGS   = 1   # max 1 stock swing per week
 
 TRADE_CONFIG = {
-    # Day trades — ATM or $1 OTM, 3-4 contracts, short DTE
-    "SPY":  {"type": "day",   "contracts": 4, "dte_days": 1, "otm": 1},
-    "QQQ":  {"type": "day",   "contracts": 4, "dte_days": 1, "otm": 1},
-    # IWM — can be day trade OR swing depending on weekly counts
-    "IWM":  {"type": "both",  "contracts": 5, "dte_day_days": 1, "dte_swing_days": 7, "otm_day": 1, "otm_swing": 3},
-    # Swing trades — 5 contracts, 3-5 OTM, 7-day DTE
-    "AMD":  {"type": "swing", "contracts": 5, "dte_days": 7, "otm": 3},
-    "TSLA": {"type": "swing", "contracts": 5, "dte_days": 7, "otm": 5},
-    "META": {"type": "swing", "contracts": 5, "dte_days": 7, "otm": 3},
-    "NVDA": {"type": "swing", "contracts": 5, "dte_days": 7, "otm": 3},
-    "INTC": {"type": "swing", "contracts": 5, "dte_days": 7, "otm": 1},
-    "TSM":  {"type": "swing", "contracts": 5, "dte_days": 7, "otm": 2},
-    "CAR":  {"type": "swing", "contracts": 5, "dte_days": 7, "otm": 3},
-    "F":    {"type": "swing", "contracts": 5, "dte_days": 7, "otm": 1},
+    # Day trades — $1 OTM, 3 contracts, 1-day DTE, Mon-Thu only
+    "SPY":  {"type": "day",   "contracts": 3, "dte_days": 1, "otm": 1},
+    "QQQ":  {"type": "day",   "contracts": 3, "dte_days": 1, "otm": 1},
+    # IWM — day trade or swing
+    "IWM":  {"type": "both",  "contracts": 3, "dte_day_days": 1, "dte_swing_days": 7, "otm_day": 1, "otm_swing": 1},
+    # Stock swings — 1 contract, $1 OTM, max $550, hold up to 3 weeks
+    "AMD":  {"type": "swing", "contracts": 1, "dte_days": 21, "otm": 1, "max_cost": 550},
+    "TSLA": {"type": "swing", "contracts": 1, "dte_days": 21, "otm": 1, "max_cost": 550},
+    "META": {"type": "swing", "contracts": 1, "dte_days": 21, "otm": 1, "max_cost": 550},
+    "NVDA": {"type": "swing", "contracts": 1, "dte_days": 21, "otm": 1, "max_cost": 550},
+    "INTC": {"type": "swing", "contracts": 1, "dte_days": 21, "otm": 1, "max_cost": 550},
+    "TSM":  {"type": "swing", "contracts": 1, "dte_days": 21, "otm": 1, "max_cost": 550},
+    "CAR":  {"type": "swing", "contracts": 1, "dte_days": 21, "otm": 1, "max_cost": 550},
+    "F":    {"type": "swing", "contracts": 1, "dte_days": 21, "otm": 1, "max_cost": 550},
 }
 RSI_TOP_THRESHOLD   = 65   # RSI at or above → look for PUT
 RSI_BOT_THRESHOLD   = 38   # RSI at or below → look for CALL
