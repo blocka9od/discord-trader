@@ -34,10 +34,10 @@ WATCH_USER         = "jrgreatness"
 CONTRACT_MIN       = 25      # minimum contract total cost ($25)
 CONTRACT_MAX       = 299     # maximum contract total cost ($299)
 MIN_STOCK_PRICE    = 1.0     # allow cheap stocks JR trades (Nokia, etc.)
-QTY_TIER1          = 6       # qty when contract costs $25–$50
-QTY_TIER2          = 3       # qty when contract costs $51–$85
-QTY_TIER3          = 3       # qty when contract costs $86–$150
-QTY_TIER4          = 2       # qty when contract costs $151–$299
+QTY_TIER1          = 10      # qty when contract costs $25–$50
+QTY_TIER2          = 7       # qty when contract costs $51–$85
+QTY_TIER3          = 5       # qty when contract costs $86–$150
+QTY_TIER4          = 3       # qty when contract costs $151–$299
 TAKE_PROFIT_MIN    = 3.00    # 300% = 3x entry
 TAKE_PROFIT_MAX    = 8.00    # 800% = 8x entry
 PNL_MIN            = -6.0    # min P&L % for normal entry
