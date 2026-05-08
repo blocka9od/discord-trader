@@ -333,7 +333,24 @@ def execute(t, trade_type):
             return
 
         limit = round(contract_price * 1.05, 2)
-        qty   = cfg["contracts"]
+        total_cost = round(contract_price * 100, 2)
+
+        # Stock swing qty tiers
+        if trade_type == "stock_swing":
+            if total_cost > 550:
+                print(f"  {symbol}: contract ${total_cost:.0f} over $550 max — skipping")
+                return
+            elif total_cost <= 150:
+                qty = 2
+            elif total_cost <= 250:
+                qty = 2
+            elif total_cost <= 399:
+                qty = 3
+            else:
+                qty = 1
+        else:
+            qty = cfg["contracts"]
+
         cost  = round(limit * qty * 100, 0)
 
         order = tc.submit_order(LimitOrderRequest(
