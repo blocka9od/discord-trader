@@ -31,12 +31,13 @@ EMAIL_PASS    = os.environ["EMAIL_PASS"]
 WATCH_SERVER       = "stock levels university"
 WATCH_CHANNEL      = "free-watchlist-alerts"
 WATCH_USER         = "jrgreatness"
-CONTRACT_MIN       = 10      # minimum contract total cost ($10)
-CONTRACT_MAX       = 150     # maximum contract total cost ($150)
-MIN_STOCK_PRICE    = 10.0    # skip stocks that don't move in dollars
-QTY_TIER1          = 12      # qty when contract costs $10–$25
-QTY_TIER2          = 6       # qty when contract costs $26–$75
-QTY_TIER3          = 3       # qty when contract costs $76–$150
+CONTRACT_MIN       = 25      # minimum contract total cost ($25)
+CONTRACT_MAX       = 299     # maximum contract total cost ($299)
+MIN_STOCK_PRICE    = 1.0     # allow cheap stocks JR trades (Nokia, etc.)
+QTY_TIER1          = 6       # qty when contract costs $25–$50
+QTY_TIER2          = 3       # qty when contract costs $51–$85
+QTY_TIER3          = 3       # qty when contract costs $86–$150
+QTY_TIER4          = 2       # qty when contract costs $151–$299
 TAKE_PROFIT_MIN    = 3.50    # 350% = 3.5x entry
 TAKE_PROFIT_MAX    = 14.00   # 1300% = 14x entry
 PNL_MIN            = -6.0    # min P&L % for normal entry
@@ -48,7 +49,10 @@ LATE_CONTRACT_MAX  = 750     # late entry contract max cost ($)
 LATE_QTY           = 1       # late entry qty
 LATE_TAKE_PROFIT   = 1.80    # late entry take profit (180%)
 DAY_TRADE_LIMIT    = 2       # max day trades per week
-DAY_TRADES_FILE    = r"C:\Users\ajblo\trading_bot\day_trades.json"
+BOT_DIR            = os.path.dirname(os.path.abspath(__file__))
+DAY_TRADES_FILE    = os.path.join(BOT_DIR, "day_trades.json")
+WATCHLIST_FILE     = os.path.join(BOT_DIR, "watchlist.json")
+JR_POSITIONS_FILE  = os.path.join(BOT_DIR, "jr_positions.json")
 
 tc             = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 data_client    = StockHistoricalDataClient(ALPACA_KEY, ALPACA_SECRET)
@@ -66,6 +70,94 @@ def send_email(subject, body):
             s.send_message(msg)
     except Exception as e:
         print(f"Email error: {e}")
+
+def add_to_watchlist(ticker):
+    """Add a JR ticker to watchlist.json so trading_reports.py scans it too."""
+    try:
+        try:
+            with open(WATCHLIST_FILE) as f:
+                data = json.load(f)
+        except Exception:
+            data = {"jr_watchlist": []}
+        if ticker not in data["jr_watchlist"]:
+            data["jr_watchlist"].append(ticker)
+            with open(WATCHLIST_FILE, "w") as f:
+                json.dump(data, f, indent=2)
+            print(f"  [{ticker}] added to swing watchlist")
+            send_email(
+                f"📋 Watchlist Updated: {ticker} Added",
+                f"{ticker} added to swing scan watchlist — JR just traded it.\n\n"
+                f"Now appears in: 2:00 PM full scan, earnings alerts, after-hours checks."
+            )
+    except Exception as e:
+        print(f"  Watchlist update failed: {e}")
+
+
+def log_jr_position(ticker, alpaca_symbol, qty, direction):
+    """Record a position copied from JR so we can close it when he exits."""
+    try:
+        try:
+            with open(JR_POSITIONS_FILE) as f:
+                positions = json.load(f)
+        except Exception:
+            positions = []
+        positions.append({
+            "ticker":         ticker,
+            "alpaca_symbol":  alpaca_symbol,
+            "qty":            qty,
+            "direction":      direction,
+            "entered":        datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "open":           True,
+        })
+        with open(JR_POSITIONS_FILE, "w") as f:
+            json.dump(positions, f, indent=2)
+    except Exception as e:
+        print(f"  jr_positions log error: {e}")
+
+
+def close_jr_positions(ticker):
+    """Close all open Alpaca positions that were copied from JR for this ticker."""
+    try:
+        with open(JR_POSITIONS_FILE) as f:
+            positions = json.load(f)
+    except Exception:
+        positions = []
+
+    jr_symbols = {p["alpaca_symbol"] for p in positions if p.get("open") and p["ticker"] == ticker}
+
+    if not jr_symbols:
+        # Fallback: close any open Alpaca position matching this ticker
+        try:
+            all_pos = tc.get_all_positions()
+            jr_symbols = {"".join(c for c in p.symbol if c.isalpha()) == ticker and p.symbol
+                          for p in all_pos}
+            jr_symbols = {p.symbol for p in all_pos
+                          if "".join(c for c in p.symbol if c.isalpha()) == ticker}
+        except Exception:
+            jr_symbols = set()
+
+    closed = []
+    for sym in jr_symbols:
+        try:
+            pos = tc.get_open_position(sym)
+            tc.close_position(sym)
+            closed.append(f"{sym} x{pos.qty} (P&L ${float(pos.unrealized_pl):.2f})")
+            print(f"  CLOSED JR COPY: {sym} x{pos.qty}")
+        except Exception as e:
+            print(f"  Could not close {sym}: {e}")
+
+    # Mark as closed in log
+    for p in positions:
+        if p["ticker"] == ticker and p.get("open"):
+            p["open"] = False
+    try:
+        with open(JR_POSITIONS_FILE, "w") as f:
+            json.dump(positions, f, indent=2)
+    except Exception:
+        pass
+
+    return closed
+
 
 def get_day_trades_used():
     week = date.today().strftime("%Y-W%W")
@@ -204,22 +296,20 @@ async def execute_late_entry(trade, source_text, pnl, report=""):
         )
         contracts = tc.get_option_contracts(req)
         if not contracts.option_contracts:
-            send_email("Late Entry — No Contract", f"JR P&L {pnl}%\n{source_text}\n\nNo contract found.")
+            print(f"  Late entry: no contract found for {ticker}")
             return
 
         contract   = contracts.option_contracts[0]
         price      = float(contract.close_price) if contract.close_price else None
         if price is None:
-            send_email("Late Entry — No Price", f"JR P&L {pnl}%\n{source_text}\n\nCould not get contract price.")
+            print(f"  Late entry: no price on contract for {ticker}")
             return
 
         total_cost = price * 100
         print(f"  Late entry contract: ${price:.2f}/share = ${total_cost:.0f}/contract")
 
         if not (LATE_CONTRACT_MIN <= total_cost <= LATE_CONTRACT_MAX):
-            msg = f"SKIPPED late entry: contract ${total_cost:.0f} outside ${LATE_CONTRACT_MIN}–${LATE_CONTRACT_MAX} range"
-            print(msg)
-            send_email("Late Entry Skipped — Cost Out of Range", f"{source_text}\n\n{msg}")
+            print(f"  SKIPPED late entry: contract ${total_cost:.0f} outside range")
             return
 
         tp_price = round(price * LATE_TAKE_PROFIT, 2)
@@ -243,6 +333,7 @@ async def execute_late_entry(trade, source_text, pnl, report=""):
             f"Time: {datetime.now().strftime('%I:%M %p')}\n\n"
             f"── WHAT BOT SAW ──\n{report}"
         )
+        log_jr_position(ticker, contract.symbol, LATE_QTY, direction)
         print(body)
         send_email(f"LATE ENTRY: {ticker} {direction} ${contract.strike_price} — TP@180%", body)
 
@@ -262,9 +353,7 @@ async def execute_trade(trade, source_text, report=""):
         latest      = data_client.get_stock_latest_trade(StockLatestTradeRequest(symbol_or_symbols=ticker))
         stock_price = latest[ticker].price
         if stock_price < MIN_STOCK_PRICE:
-            msg = f"SKIPPED {ticker}: stock price ${stock_price:.2f} — moves in cents, not dollars"
-            print(msg)
-            send_email("Trade Skipped — Penny Stock", f"{source_text}\n\n{msg}")
+            print(f"  SKIPPED {ticker}: stock price ${stock_price:.2f} below minimum")
             return
     except Exception as e:
         print(f"  Price check failed for {ticker}: {e}")
@@ -312,20 +401,19 @@ async def execute_trade(trade, source_text, report=""):
             print(f"  Error checking strike {s}: {e}")
 
     if not chosen_contract:
-        msg = (f"NO TRADE: {ticker} {direction} — no contract in ${CONTRACT_MIN}–${CONTRACT_MAX} range "
-               f"(tried strikes {candidates})")
-        print(msg)
-        send_email("Trade Skipped — Out of Price Range", f"{source_text}\n\n{msg}")
+        print(f"  NO TRADE: {ticker} {direction} — no contract in ${CONTRACT_MIN}-${CONTRACT_MAX} range")
         return
 
     # 3. Qty tiers based on contract cost
     total_cost = chosen_price * 100
-    if total_cost <= 25:
+    if total_cost <= 50:
         qty = QTY_TIER1
-    elif total_cost <= 75:
+    elif total_cost <= 85:
         qty = QTY_TIER2
-    else:
+    elif total_cost <= 150:
         qty = QTY_TIER3
+    else:
+        qty = QTY_TIER4
 
     # Get Claude's opinion before placing order
     opinion = get_claude_opinion(trade, pnl if 'pnl' in dir() else None, stock_price, chosen_price)
@@ -352,6 +440,7 @@ async def execute_trade(trade, source_text, report=""):
             f"── WHAT BOT SAW ──\n{report}"
         )
         increment_day_trades()
+        log_jr_position(ticker, chosen_contract.symbol, qty, direction)
         print(body)
         send_email(f"TRADE COPIED: {ticker} {direction} ${chosen_contract.strike_price}", body)
 
@@ -388,11 +477,32 @@ async def on_message(message):
     text = message.content
     print(f"\n[{datetime.now().strftime('%I:%M %p')}] JR: {text}")
 
-    # Check if JR is exiting a trade
+    # Check if JR is exiting a trade — close matching positions automatically
     exit_keywords = ["out", "sold", "closed", "took profit", "exit", "selling", "took gains", "done"]
     if any(word in text.lower() for word in exit_keywords):
-        print(f"  JR EXIT signal detected")
-        send_email("JR EXITING — Close Your Position", f"JR posted exit signal:\n\n{text}\n\nClose your matching position manually or via Alpaca.")
+        print(f"  JR EXIT detected")
+        m = re.search(r'\$([A-Z]{1,5})\b', text.upper())
+        ticker = m.group(1) if m else None
+
+        if not ticker:
+            print(f"  No ticker in exit message — skipping auto-close")
+            return
+
+        try:
+            closed = close_jr_positions(ticker)
+            if closed:
+                send_email(
+                    f"CLOSED WITH JR: {ticker}",
+                    f"JR exited {ticker}. Bot closed your copied position:\n\n" +
+                    "\n".join(closed) +
+                    f"\n\nJR said: {text}"
+                )
+            else:
+                print(f"  JR exited {ticker} but no copied position found to close")
+        except Exception as e:
+            print(f"  Exit close error: {e}")
+            send_email("Exit Error — Close Manually",
+                       f"JR exited {ticker} but bot failed to close.\nClose manually!\n\nError: {e}\nJR said: {text}")
         return
 
     # Check P&L from screenshot attachments
@@ -431,8 +541,11 @@ async def on_message(message):
         return "\n".join(lines)
 
     if not trade:
-        send_email("JR Posted — Check Manually", f"Bot could not parse a trade from this post.\n\n{screenshot_report()}")
+        print(f"  Could not parse trade from JR post — skipping")
         return
+
+    # Always add ticker to watchlist regardless of whether we copy the trade
+    add_to_watchlist(trade["ticker"])
 
     # Route based on P&L
     if pnl is not None:
@@ -447,14 +560,10 @@ async def on_message(message):
                 print(f"  1 day trade used — qualifying for late entry")
                 await execute_late_entry(trade, text, pnl, screenshot_report())
             else:
-                msg = f"SKIPPED late entry: need exactly 1 day trade used this week, currently {used}"
-                print(msg)
-                send_email("Late Entry Skipped — Day Trade Count", f"{msg}\n\n{screenshot_report()}")
+                print(f"  SKIPPED late entry: day trade count is {used}, need 1")
 
         else:
-            msg = f"SKIPPED: JR P&L {pnl}% — not in normal range [{PNL_MIN}%–{PNL_MAX}%] or late range [{LATE_PNL_MIN}%–{LATE_PNL_MAX}%]"
-            print(msg)
-            send_email("Trade Skipped — P&L Out of Range", f"{msg}\n\n{screenshot_report()}")
+            print(f"  SKIPPED: JR P&L {pnl}% out of range")
     else:
         print(f"  No P&L detected — proceeding with normal entry")
         await execute_trade(trade, text, screenshot_report())

@@ -10,7 +10,7 @@ ALPACA_SECRET     = "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCnRtyiXxSifP"
 EMAIL             = "Blocka9od@gmail.com"
 EMAIL_PASS        = "dnlw dleb ryxs cljg"
 PHONE_SMS         = "9012708979@sms.cricketwireless.net"
-IWM_PROFIT_TARGET = 3400.0
+IWM_PROFIT_TARGET = 1500.0
 CHECK_INTERVAL    = 180  # 3 minutes
 
 tc         = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)

@@ -8,4 +8,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY *.py .
 
-CMD ["python", "discord_trader.py"]
+RUN chmod +x start.sh
+CMD ["bash", "start.sh"]
