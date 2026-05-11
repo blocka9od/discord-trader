@@ -98,14 +98,21 @@ def get_week_counts():
         with open(WEEK_FILE) as f:
             d = json.load(f)
         if d.get("week") != week:
-            return {"day": 0, "iwm_swing": 0, "stock_swing": 0}
+            return {"day": 0, "iwm_swing": 0, "stock_swing": 0, "daily_trade_date": ""}
         return {
-            "day":        d.get("day", 0),
-            "iwm_swing":  d.get("iwm_swing", 0),
-            "stock_swing":d.get("stock_swing", 0),
+            "day":              d.get("day", 0),
+            "iwm_swing":        d.get("iwm_swing", 0),
+            "stock_swing":      d.get("stock_swing", 0),
+            "daily_trade_date": d.get("daily_trade_date", ""),
         }
     except:
-        return {"day": 0, "iwm_swing": 0, "stock_swing": 0}
+        return {"day": 0, "iwm_swing": 0, "stock_swing": 0, "daily_trade_date": ""}
+
+
+def already_traded_today():
+    """Returns True if a trade was already placed today — max 1 trade per day."""
+    counts = get_week_counts()
+    return counts.get("daily_trade_date") == datetime.date.today().strftime("%Y-%m-%d")
 
 
 def log_trade(trade_type):
@@ -113,6 +120,7 @@ def log_trade(trade_type):
     counts = get_week_counts()
     counts[trade_type] = counts.get(trade_type, 0) + 1
     counts["week"] = week
+    counts["daily_trade_date"] = datetime.date.today().strftime("%Y-%m-%d")
     with open(WEEK_FILE, "w") as f:
         json.dump(counts, f)
     return counts
@@ -124,6 +132,10 @@ def can_trade(symbol):
     today  = datetime.date.today()
     cfg    = TRADE_CONFIG.get(symbol, {})
     t      = cfg.get("type", "swing")
+
+    # MAX 1 TRADE PER DAY — pick the best setup, not all of them
+    if already_traded_today():
+        return False, "already_traded_today"
 
     # No trades on Friday for day trades
     if today.weekday() == 4 and symbol in DAY_TRADE_TICKERS:
