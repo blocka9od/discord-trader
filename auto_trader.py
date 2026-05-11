@@ -112,9 +112,23 @@ def get_week_counts():
 
 
 def already_traded_today():
-    """Returns True if a trade was already placed today — max 1 trade per day."""
-    counts = get_week_counts()
-    return counts.get("daily_trade_date") == datetime.date.today().strftime("%Y-%m-%d")
+    """Check Alpaca directly — max 1 trade per day. Survives container restarts."""
+    try:
+        import requests
+        today = datetime.datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
+        r = requests.get(
+            f"https://paper-api.alpaca.markets/v2/account/activities/FILL?after={today}",
+            headers={"APCA-API-KEY-ID": API_KEY, "APCA-API-SECRET-KEY": SECRET_KEY}
+        )
+        fills = r.json()
+        buys = [f for f in fills if isinstance(f, dict) and f.get("side") == "buy"]
+        if buys:
+            print(f"  Already traded today ({len(buys)} fills) — skipping")
+            return True
+        return False
+    except Exception as e:
+        print(f"  already_traded_today check failed: {e}")
+        return False
 
 
 def log_trade(trade_type):
