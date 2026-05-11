@@ -41,6 +41,8 @@ MAX_DAY_TRADES     = 2   # IWM/SPY/QQQ — same-day exit, Mon-Thu only
 MAX_SWING_TRADES   = 5   # 2 JR + 2 Friday straddle + 1 stock swing
 MAX_IWM_SWINGS     = 1   # only 1 IWM swing per week (not counting straddle)
 MAX_STOCK_SWINGS   = 1   # max 1 stock swing per week
+MAX_DAY_TRADE_COST   = 350   # max total cost for day trades ($)
+MAX_SWING_TRADE_COST = 650   # max total cost for swing trades ($)
 
 TRADE_CONFIG = {
     # Day trades — $1 OTM, 3 contracts, 1-day DTE, Mon-Thu only
@@ -346,6 +348,12 @@ def execute(t, trade_type):
 
         limit = round(contract_price * 1.05, 2)
         total_cost = round(contract_price * 100, 2)
+
+        # Cost limits per trade type
+        max_cost = MAX_DAY_TRADE_COST if trade_type == "day" else MAX_SWING_TRADE_COST
+        if total_cost > max_cost:
+            print(f"  {symbol}: contract ${total_cost:.0f} over ${max_cost} max for {trade_type} — skipping")
+            return
 
         # Stock swing qty tiers
         if trade_type == "stock_swing":

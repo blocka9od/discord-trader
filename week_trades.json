@@ -1,1 +1,7 @@
-{"day": 2, "iwm_swing": 1, "stock_swing": 2, "week": "2026-W18"}
+{
+  "week": "2026-W19",
+  "day": 2,
+  "iwm_swing": 0,
+  "stock_swing": 0,
+  "daily_trade_date": "2026-05-11"
+}
