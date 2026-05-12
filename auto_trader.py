@@ -404,17 +404,10 @@ def execute(t, trade_type):
         else:
             try:
                 tc.cancel_order_by_id(order.id)
-                print(f"  {symbol}: limit not filled in 2 min — cancelling and retrying")
-                from alpaca.trading.requests import MarketOrderRequest
-                order = tc.submit_order(MarketOrderRequest(
-                    symbol=contract.symbol,
-                    qty=qty,
-                    side=OrderSide.BUY,
-                    time_in_force=TimeInForce.DAY,
-                ))
-                print(f"  {symbol}: market order placed — {order.id}")
+                print(f"  {symbol}: limit not filled in 2 min — cancelling, no retry")
+                send_email(f"Trade Not Filled — {symbol}", f"{symbol} {direction} limit order did not fill in 2 minutes. Cancelled. No market order placed.")
             except Exception as retry_err:
-                print(f"  {symbol}: retry error — {retry_err}")
+                print(f"  {symbol}: cancel error — {retry_err}")
 
         week_count = log_trade(trade_type)
 
