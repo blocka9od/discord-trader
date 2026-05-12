@@ -41,8 +41,8 @@ MAX_DAY_TRADES     = 2   # IWM/SPY/QQQ — same-day exit, Mon-Thu only
 MAX_SWING_TRADES   = 5   # 2 JR + 2 Friday straddle + 1 stock swing
 MAX_IWM_SWINGS     = 1   # only 1 IWM swing per week (not counting straddle)
 MAX_STOCK_SWINGS   = 1   # max 1 stock swing per week
-MAX_DAY_TRADE_COST   = 350   # max total cost for day trades ($)
-MAX_SWING_TRADE_COST = 650   # max total cost for swing trades ($)
+MAX_DAY_TRADE_COST   = 400   # max total cost for day trades ($)
+MAX_SWING_TRADE_COST = 1000  # max total cost for swing trades ($)
 
 TRADE_CONFIG = {
     # Day trades — $1 OTM, 3 contracts, 1-day DTE, Mon-Thu only
@@ -89,7 +89,7 @@ def is_trading_hours():
     if n.weekday() >= 5:
         return False
     h, m = n.hour, n.minute
-    after_open  = (h == 8 and m >= 45) or h >= 9
+    after_open  = (h == 8 and m >= 30) or h >= 9
     before_cut  = h < 14 or (h == 14 and m <= 30)
     return after_open and before_cut
 
