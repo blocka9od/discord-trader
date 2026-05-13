@@ -8,5 +8,8 @@ python trump_trader.py &
 echo "Starting nvda_monitor..."
 python nvda_monitor.py &
 
+echo "Starting position_monitor..."
+python position_monitor.py &
+
 echo "Starting discord_trader..."
 python discord_trader.py

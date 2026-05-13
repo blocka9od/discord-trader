@@ -10,8 +10,8 @@ ALPACA_SECRET     = "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCnRtyiXxSifP"
 EMAIL             = "Blocka9od@gmail.com"
 EMAIL_PASS        = "dnlw dleb ryxs cljg"
 PHONE_SMS         = "9012708979@sms.cricketwireless.net"
-IWM_PROFIT_TARGET = 1500.0
-CHECK_INTERVAL    = 180  # 3 minutes
+AUTO_PROFIT_TARGET = 1000.0  # close ANY position once up $1,000+
+CHECK_INTERVAL     = 60      # check every 60 seconds
 
 tc         = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 sent_today = None
@@ -31,16 +31,38 @@ def send_text(message):
     except Exception as e:
         print(f"  Text error: {e}")
 
+def send_email(subject, body):
+    try:
+        msg = MIMEMultipart()
+        msg["From"]    = EMAIL
+        msg["To"]      = EMAIL
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+            s.login(EMAIL, EMAIL_PASS)
+            s.send_message(msg)
+    except Exception as e:
+        print(f"Email error: {e}")
+
 def check_profit_targets():
     try:
         positions = tc.get_all_positions()
         for p in positions:
             pnl = float(p.unrealized_pl)
-            if "IWM" in p.symbol and "P" in p.symbol and pnl >= IWM_PROFIT_TARGET:
-                key = f"IWM_3400_{datetime.now().strftime('%Y%m%d')}"
+            # Auto close ANY position up $1,000+
+            if pnl >= AUTO_PROFIT_TARGET:
+                key = f"{p.symbol}_tp_{datetime.now().strftime('%Y%m%d')}"
                 if key not in alerted:
-                    send_text(f"IWM PUT HIT $3,400 PROFIT — P&L ${pnl:.2f} TAKE IT NOW")
-                    alerted.add(key)
+                    try:
+                        tc.close_position(p.symbol)
+                        send_email(
+                            f"TAKE PROFIT — {p.symbol} +${pnl:.2f}",
+                            f"Auto-closed {p.symbol}\nP&L: +${pnl:.2f}\nEntry: ${p.avg_entry_price}\nCurrent: ${p.current_price}\nQty: {p.qty}"
+                        )
+                        alerted.add(key)
+                        print(f"  CLOSED {p.symbol} at +${pnl:.2f}")
+                    except Exception as e:
+                        print(f"  Close error {p.symbol}: {e}")
     except Exception as e:
         print(f"Error checking profit targets: {e}")
 

@@ -11,8 +11,9 @@ ALPACA_KEY    = "PK2G5C5BQQ7AP5WNWBEUSKXOTI"
 ALPACA_SECRET = "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCnRtyiXxSifP"
 EMAIL         = "Blocka9od@gmail.com"
 EMAIL_PASS    = "dnlw dleb ryxs cljg"
-TARGET_PRICE  = 228.60
-OPTION_SYMBOL = "NVDA260515C00222500"
+TARGET_PRICE   = 228.60
+PROFIT_TARGET  = 1000.0
+OPTION_SYMBOL  = "NVDA260515C00222500"
 
 tc = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 
@@ -46,20 +47,22 @@ while True:
         price = get_nvda_price()
         if price:
             print(f"[{datetime.now().strftime('%H:%M')}] NVDA: ${price:.2f} | Target: ${TARGET_PRICE}")
-            if price >= TARGET_PRICE:
-                print(f"TARGET HIT — closing {OPTION_SYMBOL}")
-                try:
+            # Check profit on position
+            try:
+                pos = tc.get_open_position(OPTION_SYMBOL)
+                pnl = float(pos.unrealized_pl)
+                print(f"  P&L: ${pnl:.2f}")
+                if pnl >= PROFIT_TARGET or price >= TARGET_PRICE:
+                    reason = f"P&L ${pnl:.2f} hit ${PROFIT_TARGET}" if pnl >= PROFIT_TARGET else f"stock hit ${price:.2f}"
                     tc.close_position(OPTION_SYMBOL)
                     send_email(
-                        f"NVDA SOLD — Target Hit ${price:.2f}",
-                        f"NVDA hit ${price:.2f} — target was ${TARGET_PRICE}\n"
-                        f"Closed {OPTION_SYMBOL} x5\n"
-                        f"Check account for final P&L."
+                        f"NVDA SOLD — {reason}",
+                        f"Closed {OPTION_SYMBOL} x5\nP&L: ${pnl:.2f}\nNVDA price: ${price:.2f}\nReason: {reason}"
                     )
-                    print("Position closed — monitor stopping")
+                    print(f"Position closed — {reason}")
                     break
-                except Exception as e:
-                    print(f"Close error: {e}")
+            except Exception as e:
+                print(f"Position check error: {e}")
         time.sleep(60)
     except KeyboardInterrupt:
         break
