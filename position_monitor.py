@@ -10,8 +10,10 @@ ALPACA_SECRET     = "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCnRtyiXxSifP"
 EMAIL             = "Blocka9od@gmail.com"
 EMAIL_PASS        = "dnlw dleb ryxs cljg"
 PHONE_SMS         = "9012708979@sms.cricketwireless.net"
-AUTO_PROFIT_TARGET = 1000.0  # close ANY position once up $1,000+
-CHECK_INTERVAL     = 60      # check every 60 seconds
+PROFIT_MIN   = 1000.0   # minimum take profit if cant reach higher
+PROFIT_MID   = 2000.0   # target range start
+PROFIT_MAX   = 3000.0   # take profit at max
+CHECK_INTERVAL = 60     # check every 60 seconds
 
 tc         = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 sent_today = None
@@ -46,23 +48,39 @@ def send_email(subject, body):
 
 def check_profit_targets():
     try:
+        now = datetime.now()
+        near_close = now.hour == 14 and now.minute >= 30  # after 2:30 PM CT
         positions = tc.get_all_positions()
         for p in positions:
             pnl = float(p.unrealized_pl)
-            # Auto close ANY position up $1,000+
-            if pnl >= AUTO_PROFIT_TARGET:
-                key = f"{p.symbol}_tp_{datetime.now().strftime('%Y%m%d')}"
-                if key not in alerted:
-                    try:
-                        tc.close_position(p.symbol)
-                        send_email(
-                            f"TAKE PROFIT — {p.symbol} +${pnl:.2f}",
-                            f"Auto-closed {p.symbol}\nP&L: +${pnl:.2f}\nEntry: ${p.avg_entry_price}\nCurrent: ${p.current_price}\nQty: {p.qty}"
-                        )
-                        alerted.add(key)
-                        print(f"  CLOSED {p.symbol} at +${pnl:.2f}")
-                    except Exception as e:
-                        print(f"  Close error {p.symbol}: {e}")
+            key = f"{p.symbol}_tp_{now.strftime('%Y%m%d')}"
+
+            should_close = False
+            reason = ""
+
+            if pnl >= PROFIT_MAX:
+                should_close = True
+                reason = f"hit max target ${pnl:.2f}"
+            elif pnl >= PROFIT_MID:
+                should_close = True
+                reason = f"in target range ${pnl:.2f}"
+            elif pnl >= PROFIT_MIN and near_close:
+                should_close = True
+                reason = f"at ${pnl:.2f} near market close — taking $1k+"
+
+            if should_close and key not in alerted:
+                try:
+                    tc.close_position(p.symbol)
+                    send_email(
+                        f"TAKE PROFIT — {p.symbol} +${pnl:.2f}",
+                        f"Auto-closed {p.symbol}\nReason: {reason}\nP&L: +${pnl:.2f}\nEntry: ${p.avg_entry_price}\nCurrent: ${p.current_price}\nQty: {p.qty}"
+                    )
+                    alerted.add(key)
+                    print(f"  CLOSED {p.symbol} — {reason}")
+                except Exception as e:
+                    print(f"  Close error {p.symbol}: {e}")
+            elif pnl >= PROFIT_MIN and not should_close:
+                print(f"  {p.symbol} at +${pnl:.2f} — letting ride toward $2,000-$3,000")
     except Exception as e:
         print(f"Error checking profit targets: {e}")
 
