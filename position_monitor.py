@@ -10,9 +10,9 @@ ALPACA_SECRET     = "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCnRtyiXxSifP"
 EMAIL             = "Blocka9od@gmail.com"
 EMAIL_PASS        = "dnlw dleb ryxs cljg"
 PHONE_SMS         = "9012708979@sms.cricketwireless.net"
-PROFIT_MIN   = 1000.0   # minimum take profit if cant reach higher
-PROFIT_MID   = 2000.0   # target range start
-PROFIT_MAX   = 3000.0   # take profit at max
+PROFIT_MIN   = 1000.0   # minimum take profit near close
+PROFIT_MID   = 2000.0   # target range start — let it ride here
+PROFIT_MAX   = 4000.0   # hard take profit — always close at $4,000
 CHECK_INTERVAL = 60     # check every 60 seconds
 
 tc         = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
