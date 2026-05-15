@@ -61,19 +61,24 @@ def check_profit_targets():
             tp_target  = round(total_cost * IWM_TP_MULTIPLE, 2)
             print(f"  IWM straddle P&L: ${total_pnl:.2f} | target: ${tp_target:.2f} (3.4x ${total_cost:.2f})")
             if total_pnl >= tp_target:
-                for p in iwm_positions:
-                    key = f"{p.symbol}_tp_{now.strftime('%Y%m%d')}"
-                    if key not in alerted:
-                        try:
-                            tc.close_position(p.symbol)
-                            alerted.add(key)
-                        except Exception as e:
-                            print(f"  Close error {p.symbol}: {e}")
-                send_email(
-                    f"IWM STRADDLE CLOSED — +${total_pnl:.2f} (3.4x)",
-                    f"IWM straddle hit 3.4x take profit\nTotal invested: ${total_cost:.2f}\nProfit: +${total_pnl:.2f}\nTarget was: ${tp_target:.2f}"
-                )
-                print(f"  IWM straddle closed at 3.4x")
+                # Only close if BOTH legs are profitable — never sell a leg at a loss
+                all_positive = all(float(p.unrealized_pl) >= 0 for p in iwm_positions)
+                if all_positive:
+                    for p in iwm_positions:
+                        key = f"{p.symbol}_tp_{now.strftime('%Y%m%d')}"
+                        if key not in alerted:
+                            try:
+                                tc.close_position(p.symbol)
+                                alerted.add(key)
+                            except Exception as e:
+                                print(f"  Close error {p.symbol}: {e}")
+                    send_email(
+                        f"IWM STRADDLE CLOSED — +${total_pnl:.2f} (3.4x)",
+                        f"IWM straddle hit 3.4x take profit\nTotal invested: ${total_cost:.2f}\nProfit: +${total_pnl:.2f}\nTarget was: ${tp_target:.2f}"
+                    )
+                    print(f"  IWM straddle closed at 3.4x")
+                else:
+                    print(f"  3.4x hit but one leg still negative — letting both ride")
 
         for p in positions:
             pnl = float(p.unrealized_pl)
