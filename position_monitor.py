@@ -10,10 +10,11 @@ ALPACA_SECRET     = "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCnRtyiXxSifP"
 EMAIL             = "Blocka9od@gmail.com"
 EMAIL_PASS        = "dnlw dleb ryxs cljg"
 PHONE_SMS         = "9012708979@sms.cricketwireless.net"
-PROFIT_MIN   = 1000.0   # minimum take profit near close
-PROFIT_MID   = 2000.0   # target range start — let it ride here
-PROFIT_MAX   = 4000.0   # hard take profit — always close at $4,000
-CHECK_INTERVAL = 60     # check every 60 seconds
+PROFIT_MIN      = 1000.0   # minimum take profit near close
+PROFIT_MID      = 2000.0   # target range start — let it ride here
+PROFIT_MAX      = 4000.0   # hard take profit — always close at $4,000
+IWM_TP_MULTIPLE = 3.4      # IWM straddle: close when profit = 3.4x cost
+CHECK_INTERVAL  = 60       # check every 60 seconds
 
 tc         = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
 sent_today = None
@@ -51,6 +52,29 @@ def check_profit_targets():
         now = datetime.now()
         near_close = now.hour == 14 and now.minute >= 30  # after 2:30 PM CT
         positions = tc.get_all_positions()
+
+        # IWM straddle — group call + put, close both when combined profit = 3.4x cost
+        iwm_positions = [p for p in positions if 'IWM' in p.symbol and p.symbol != 'IWM']
+        if iwm_positions:
+            total_cost = sum(float(p.avg_entry_price) * float(p.qty) * 100 for p in iwm_positions)
+            total_pnl  = sum(float(p.unrealized_pl) for p in iwm_positions)
+            tp_target  = round(total_cost * IWM_TP_MULTIPLE, 2)
+            print(f"  IWM straddle P&L: ${total_pnl:.2f} | target: ${tp_target:.2f} (3.4x ${total_cost:.2f})")
+            if total_pnl >= tp_target:
+                for p in iwm_positions:
+                    key = f"{p.symbol}_tp_{now.strftime('%Y%m%d')}"
+                    if key not in alerted:
+                        try:
+                            tc.close_position(p.symbol)
+                            alerted.add(key)
+                        except Exception as e:
+                            print(f"  Close error {p.symbol}: {e}")
+                send_email(
+                    f"IWM STRADDLE CLOSED — +${total_pnl:.2f} (3.4x)",
+                    f"IWM straddle hit 3.4x take profit\nTotal invested: ${total_cost:.2f}\nProfit: +${total_pnl:.2f}\nTarget was: ${tp_target:.2f}"
+                )
+                print(f"  IWM straddle closed at 3.4x")
+
         for p in positions:
             pnl = float(p.unrealized_pl)
             key = f"{p.symbol}_tp_{now.strftime('%Y%m%d')}"
