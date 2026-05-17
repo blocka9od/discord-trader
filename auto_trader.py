@@ -5,6 +5,7 @@ Detects tops (PUTS) and bottoms (CALLS) and places orders automatically.
 """
 import os, sys, time, json, smtplib
 import datetime
+import anthropic
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import pandas as pd
 import pytz
@@ -24,9 +25,10 @@ SECRET_KEY = os.environ.get("ALPACA_SECRET", "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCn
 EMAIL      = os.environ.get("EMAIL",         "Blocka9od@gmail.com")
 EMAIL_PASS = os.environ.get("EMAIL_PASS",    "dnlw dleb ryxs cljg")
 
-tc          = TradingClient(API_KEY, SECRET_KEY, paper=True)
-data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
-CT          = pytz.timezone("America/Chicago")
+tc           = TradingClient(API_KEY, SECRET_KEY, paper=True)
+data_client  = StockHistoricalDataClient(API_KEY, SECRET_KEY)
+CT           = pytz.timezone("America/Chicago")
+claude       = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_KEY", ""))
 
 BOT_DIR        = os.path.dirname(os.path.abspath(__file__))
 WATCHLIST_FILE = os.path.join(BOT_DIR, "watchlist.json")
@@ -78,6 +80,39 @@ def send_email(subject, body):
         print(f"  email sent: {subject}")
     except Exception as e:
         print(f"  email error: {e}")
+
+
+def get_ai_second_opinion(trade, direction, contract, contract_price):
+    """Ask a second AI to review the trade before placing it. Returns True to approve."""
+    try:
+        prompt = (
+            f"You are a skilled trading AI reviewing a trade setup. Give a YES or NO decision only.\n\n"
+            f"Trade Setup:\n"
+            f"- Stock: {trade['symbol']} at ${trade['price']:.2f}\n"
+            f"- Direction: {direction}\n"
+            f"- RSI: {trade['rsi']:.1f}\n"
+            f"- Price vs EMA8: {'below' if trade['price'] < trade['ema8'] else 'above'}\n"
+            f"- Price vs EMA20: {'below' if trade['price'] < trade['ema20'] else 'above'}\n"
+            f"- Price vs EMA50: {'below' if trade['price'] < trade['ema50'] else 'above'}\n"
+            f"- Signal reason: {trade['reason']}\n"
+            f"- Contract: {contract.symbol} @ ${contract_price:.2f}\n\n"
+            f"Rules: Only approve if this is a high probability mean reversion setup. "
+            f"CALLS need oversold RSI + price below EMAs. PUTS need overbought RSI + price above EMAs. "
+            f"Reject if the setup looks weak or risky.\n\n"
+            f"Reply with only: APPROVE or REJECT and one short reason."
+        )
+        resp = claude.messages.create(
+            model="claude-opus-4-7",
+            max_tokens=50,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        answer = resp.content[0].text.strip().upper()
+        approved = "APPROVE" in answer
+        print(f"  AI second opinion: {answer[:80]}")
+        return approved
+    except Exception as e:
+        print(f"  AI review failed: {e} — approving by default")
+        return True
 
 
 def now_ct():
@@ -358,6 +393,14 @@ def execute(t, trade_type):
         contract_price = float(contract.close_price or 0)
         if contract_price <= 0:
             print(f"  {symbol}: contract has no price")
+            return
+
+        # ── AI Collaboration — get second opinion before placing trade ────────
+        ai_approved = get_ai_second_opinion(t, direction, contract, contract_price)
+        if not ai_approved:
+            print(f"  {symbol}: second AI rejected trade — skipping")
+            send_email(f"Trade Skipped — {symbol} {direction}",
+                       f"Second AI review rejected this trade.\n{t['reason']}\nStock: ${price:.2f}\nContract: {contract.symbol}")
             return
 
         limit = round(contract_price * 1.05, 2)
