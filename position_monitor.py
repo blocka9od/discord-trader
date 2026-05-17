@@ -64,17 +64,28 @@ def check_profit_targets():
             if IWM_TP_MIN <= total_pnl <= IWM_TP_MAX or total_pnl > IWM_TP_MAX:
                 straddle_key = f"IWM_straddle_tp_{now.strftime('%Y%m%d')}"
                 if straddle_key not in alerted:
+                    # Only close legs that are in profit — never close a losing leg
+                    closed = []
+                    held = []
                     for p in iwm_positions:
-                        try:
-                            tc.close_position(p.symbol)
-                        except Exception as e:
-                            print(f"  Close error {p.symbol}: {e}")
+                        leg_pnl = float(p.unrealized_pl)
+                        if leg_pnl >= 0:
+                            try:
+                                tc.close_position(p.symbol)
+                                closed.append(f"{p.symbol} +${leg_pnl:.2f}")
+                            except Exception as e:
+                                print(f"  Close error {p.symbol}: {e}")
+                        else:
+                            held.append(f"{p.symbol} ${leg_pnl:.2f} — letting ride")
                     alerted.add(straddle_key)
                     send_email(
-                        f"IWM STRADDLE CLOSED — +${total_pnl:.2f}",
-                        f"IWM straddle hit take profit target\nTotal invested: ${total_cost:.2f}\nProfit: +${total_pnl:.2f}\nTarget range: $800-$1,300"
+                        f"IWM STRADDLE PARTIAL CLOSE — +${total_pnl:.2f}",
+                        f"IWM straddle hit $800-$1,300 target\n\nCLOSED (in profit):\n" +
+                        "\n".join(closed) +
+                        "\n\nHELDING (still negative — letting ride):\n" +
+                        "\n".join(held) if held else "\nAll legs closed."
                     )
-                    print(f"  IWM straddle closed at +${total_pnl:.2f}")
+                    print(f"  IWM straddle: closed profitable legs, held losing legs")
             else:
                 print(f"  IWM straddle at +${total_pnl:.2f} — holding until $800-$1,300")
 
