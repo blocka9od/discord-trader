@@ -103,7 +103,13 @@ def analyze_with_claude(title, description):
             model="claude-haiku-4-5-20251001",
             max_tokens=150,
             messages=[{"role": "user", "content": (
-                f"Does this news article mention Trump talking about a specific stock or company in a way that could move its price?\n\n"
+                f"You are a skilled trading AI. TRADING RULES: MAX 1 trade per day. "
+                f"EXCEPTIONS that bypass this: (1) Trump stock mentions — trade immediately, "
+                f"(2) Friday IWM straddle at 2:35 PM CT, (3) 5x opportunity setups. "
+                f"Trump trades use $1 OTM, 7-day DTE, 2-3 qty targeting ~$450 cost. "
+                f"TP: $600-$1,500 next day, hold 1 week max.\n\n"
+                f"Does this news article mention Trump talking about a specific stock or company "
+                f"in a way that could move its price?\n\n"
                 f"{text}\n\n"
                 f"Reply in this exact format only:\n"
                 f"TICKER: [stock ticker or NONE]\n"

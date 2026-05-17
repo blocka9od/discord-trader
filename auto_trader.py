@@ -87,7 +87,18 @@ def get_ai_second_opinion(trade, direction, contract, contract_price):
     try:
         prompt = (
             f"You are a skilled trading AI reviewing a trade setup. Give a YES or NO decision only.\n\n"
-            f"Trade Setup:\n"
+            f"TRADING RULES YOU MUST KNOW:\n"
+            f"- MAX 1 trade per day total\n"
+            f"- 2 day trades per week max (IWM/SPY/QQQ only)\n"
+            f"- 5 swing trades per week max\n"
+            f"- EXCEPTIONS that bypass the 1-trade-per-day limit:\n"
+            f"  1. Trump stock mentions — trade immediately\n"
+            f"  2. Friday IWM straddle — always at 2:35 PM CT\n"
+            f"  3. 5x opportunity — if setup can clearly 5x by next day\n"
+            f"- Day trades max $400 cost | Swing trades max $1,000 cost\n"
+            f"- Never close a swing at a loss if time remains — let it ride\n"
+            f"- Take profit: $2,000-$4,000 on swings, 3.4x cost on IWM straddle\n\n"
+            f"Trade Setup to Review:\n"
             f"- Stock: {trade['symbol']} at ${trade['price']:.2f}\n"
             f"- Direction: {direction}\n"
             f"- RSI: {trade['rsi']:.1f}\n"
@@ -96,9 +107,9 @@ def get_ai_second_opinion(trade, direction, contract, contract_price):
             f"- Price vs EMA50: {'below' if trade['price'] < trade['ema50'] else 'above'}\n"
             f"- Signal reason: {trade['reason']}\n"
             f"- Contract: {contract.symbol} @ ${contract_price:.2f}\n\n"
-            f"Rules: Only approve if this is a high probability mean reversion setup. "
+            f"Only approve if this is a high probability mean reversion setup. "
             f"CALLS need oversold RSI + price below EMAs. PUTS need overbought RSI + price above EMAs. "
-            f"Reject if the setup looks weak or risky.\n\n"
+            f"Reject if setup looks weak or risky.\n\n"
             f"Reply with only: APPROVE or REJECT and one short reason."
         )
         resp = claude.messages.create(
