@@ -13,8 +13,9 @@ EMAIL_PASS        = "dnlw dleb ryxs cljg"
 PROFIT_MIN      = 750.0    # minimum take profit on swings and day trades near close
 PROFIT_MID      = 2000.0   # target range start — let it ride here
 PROFIT_MAX      = 4000.0   # hard take profit — always close at $4,000
-IWM_TP_MIN      = 800.0    # IWM straddle: take profit floor
-IWM_TP_MAX      = 1300.0   # IWM straddle: take profit ceiling
+IWM_TP_MIN      = 800.0    # IWM straddle: min take profit
+IWM_TP_MID      = 1300.0   # IWM straddle: mid take profit
+IWM_TP_MAX      = 2500.0   # IWM straddle: max take profit
 CHECK_INTERVAL  = 60       # check every 60 seconds
 
 tc         = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=True)
@@ -61,7 +62,7 @@ def check_profit_targets():
             total_pnl  = sum(float(p.unrealized_pl) for p in iwm_positions)
             tp_target  = round(total_cost * IWM_TP_MULTIPLE, 2)
             print(f"  IWM straddle P&L: ${total_pnl:.2f} | target: ${tp_target:.2f} (3.4x ${total_cost:.2f})")
-            if IWM_TP_MIN <= total_pnl <= IWM_TP_MAX or total_pnl > IWM_TP_MAX:
+            if total_pnl >= IWM_TP_MIN:
                 straddle_key = f"IWM_straddle_tp_{now.strftime('%Y%m%d')}"
                 if straddle_key not in alerted:
                     # Only close legs that are in profit — never close a losing leg
@@ -78,12 +79,12 @@ def check_profit_targets():
                         else:
                             held.append(f"{p.symbol} ${leg_pnl:.2f} — letting ride")
                     alerted.add(straddle_key)
+                    level = "MIN ($800)" if total_pnl < IWM_TP_MID else "MID ($1,300)" if total_pnl < IWM_TP_MAX else "MAX ($2,500)"
                     send_email(
-                        f"IWM STRADDLE PARTIAL CLOSE — +${total_pnl:.2f}",
-                        f"IWM straddle hit $800-$1,300 target\n\nCLOSED (in profit):\n" +
+                        f"IWM STRADDLE CLOSED — +${total_pnl:.2f} ({level})",
+                        f"IWM straddle hit {level} take profit\n\nCLOSED (in profit):\n" +
                         "\n".join(closed) +
-                        "\n\nHELDING (still negative — letting ride):\n" +
-                        "\n".join(held) if held else "\nAll legs closed."
+                        ("\n\nHOLDING (still negative — letting ride):\n" + "\n".join(held) if held else "\n\nAll legs closed.")
                     )
                     print(f"  IWM straddle: closed profitable legs, held losing legs")
             else:
