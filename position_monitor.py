@@ -10,7 +10,7 @@ ALPACA_SECRET     = "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCnRtyiXxSifP"
 EMAIL             = "Blocka9od@gmail.com"
 EMAIL_PASS        = "dnlw dleb ryxs cljg"
 # SMS removed — all alerts go to email only
-PROFIT_MIN      = 1000.0   # minimum take profit near close
+PROFIT_MIN      = 750.0    # minimum take profit on swings and day trades near close
 PROFIT_MID      = 2000.0   # target range start — let it ride here
 PROFIT_MAX      = 4000.0   # hard take profit — always close at $4,000
 IWM_TP_MIN      = 800.0    # IWM straddle: take profit floor
