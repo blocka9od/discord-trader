@@ -9,7 +9,7 @@ ALPACA_KEY        = "PK2G5C5BQQ7AP5WNWBEUSKXOTI"
 ALPACA_SECRET     = "5NDwBjMCdn1ytRNHPqLTxTukeX32GPNmCnRtyiXxSifP"
 EMAIL             = "Blocka9od@gmail.com"
 EMAIL_PASS        = "dnlw dleb ryxs cljg"
-PHONE_SMS         = "9012708979@sms.cricketwireless.net"
+# SMS removed — all alerts go to email only
 PROFIT_MIN      = 1000.0   # minimum take profit near close
 PROFIT_MID      = 2000.0   # target range start — let it ride here
 PROFIT_MAX      = 4000.0   # hard take profit — always close at $4,000
@@ -132,6 +132,7 @@ def send_daily_pnl():
             pnl_pct = float(p.unrealized_plpc) * 100
             lines.append(f"{p.symbol}: ${pnl:.2f} ({pnl_pct:.1f}%)")
         lines.append(f"TOTAL: ${total_pnl:.2f}")
+        send_email("Daily P&L Summary", "\n".join(lines))
         send_text("\n".join(lines))
     except Exception as e:
         print(f"Error getting positions: {e}")
